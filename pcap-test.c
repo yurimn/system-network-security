@@ -1,6 +1,10 @@
 #include <pcap.h>
 #include "pcap-test.h"
 
+// add u_char, u_int
+typedef unsigned char u_char;
+typedef unsigned int u_int;
+
 
 void usage() {
 	printf("syntax: pcap-test <interface>\n");
@@ -85,9 +89,7 @@ int main(int argc, char* argv[]) {
 			int startPoint = sizeof(struct libnet_ethernet_hdr)+ sizeof(struct libnet_ipv4_hdr) + sizeof(struct libnet_tcp_hdr);
 			int size = header->caplen - startPoint;
 			for(int i=0;i<20 &&i<size;i++){
-				printf("%02x",packet[startPoint +i]);
-				if((size <10 && i != size-1) || (size >=10 && i!=9))
-					printf(" ");
+				printf("%02x ",packet[startPoint +i]);
 			}
 			
 			printf("\n\n-------------------\n\n");
