@@ -6,7 +6,8 @@
 #include <linux/netfilter.h>		/* for NF_ACCEPT */
 #include <errno.h>
 #include <string.h>
-#include "netfilter-test.h"
+
+#include "libnet.h"
 
 #include <libnetfilter_queue/libnetfilter_queue.h>
 
@@ -38,11 +39,11 @@ static int cb(struct nfq_q_handle *qh, struct nfgenmsg *nfmsg,
 	int	len = nfq_get_payload(nfa, &pkt);
 
 	if (len >= 0) {
-		IpHdr *ip_hdr = (IpHdr *)pkt;
-		TcpHdr *tcp_hdr = (TcpHdr *)(pkt + ip_hdr->hl() * 4);
-		unsigned char *http_data = (unsigned char *)tcp_hdr + tcp_hdr->off() * 4;
+		struct libnet_ipv4_hdr*ip=(struct libnet_ipv4_hdr*)pkt;
+		struct libnet_tcp_hdr*tcp=(struct libnet_tcp_hdr*)(pkt+ip->ip_hl * 4);	
+		unsigned char *http_data = (unsigned char *)tcp + tcp->th_off * 4;
 
-		if (ip_hdr->v() != 4 || ip_hdr->proto() != IpHdr::TCP) return nfq_set_verdict(qh, id, NF_ACCEPT, 0, NULL);
+		if (ip->ip_p != IPPROTO_TCP || ntohs(tcp->th_dport) != 80) return nfq_set_verdict(qh, id, NF_ACCEPT, 0, NULL);
 		if (!strstr((char *)http_data, "Host: ")) return nfq_set_verdict(qh, id, NF_ACCEPT, 0, NULL);
 
 		char *packet_host = strstr((char *)http_data, "Host: ") + 6;
