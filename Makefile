@@ -1,23 +1,16 @@
-CXX		= 	g++
-# CXX		=	g++-12 # on macbook
-CXXFLAGS= 	#-Wall -Wextra -Werror
-SRCS	= 	ip.cpp iphdr.cpp main.cpp
-NAME	=	netfilter-test
-HEADERS	=	netfilter-test.h
-OBJS	=	$(SRCS:.cpp=.o)
-RM		=	rm -f
+all: netfilter-test
 
-$(NAME) : $(OBJS) $(HEADERS)
-			$(CXX) -o $(NAME) $(CXXFLAGS) $(OBJS) -lnetfilter_queue
+netfilter-test: main.o ip.o iphdr.o tcphdr.o
+	g++ -o netfilter-test main.o -lnetfilter_queue
 
-all	: $(NAME)
+main.o: ip.h iphdr.h tcphdr.h netfilter-test.h main.cpp
+
+ip.o: ip.h ip.cpp
+
+iphdr.o: iphdr.h iphdr.cpp
+
+tcphdr.o: tcphdr.h tcphdr.cpp
 
 clean:
-	$(RM) $(OBJS)
-	$(RM) $(NAME)
-
-re:
-	$(MAKE) clean
-	$(MAKE) all
-
-.PHONY : all clean re
+	rm -f netfilter-test
+	rm -f main.o ip.o iphdr.o tcphdr.o
